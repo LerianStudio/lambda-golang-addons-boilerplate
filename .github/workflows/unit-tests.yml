@@ -20,8 +20,6 @@ jobs:
   unit-tests:
     runs-on: ubuntu-latest
     name: Run Unit Tests
-    env:
-      WORKING_DIR: components/ledger
     steps:
     - uses: actions/checkout@v4
 
