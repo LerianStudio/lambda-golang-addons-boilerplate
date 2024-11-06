@@ -22,8 +22,12 @@ var logger *zap.Logger
 func init() {
 	// Initialize logger
 	logger, _ = zap.NewProduction()
-	defer logger.Sync()
-
+	defer func() {
+		err := logger.Sync()
+		if err != nil {
+			fmt.Println("Failed to sync logger", zap.Error(err))
+		}
+	}()
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
