@@ -62,6 +62,7 @@ func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 
 	// Convert APIGatewayProxyRequest to fasthttp.Request
 	fasthttpReq := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(fasthttpReq)
 	fasthttpReq.Header.SetMethod(req.HTTPMethod)
 	fasthttpReq.SetRequestURI(req.Path)
 	for k, v := range req.Headers {
@@ -69,27 +70,22 @@ func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 	}
 	fasthttpReq.SetBody([]byte(req.Body))
 
-	// Create fasthttp.Response
-	fasthttpResp := fasthttp.AcquireResponse()
+	// Create fasthttp.RequestCtx
+	requestCtx := &fasthttp.RequestCtx{}
+	requestCtx.Init(fasthttpReq, nil, nil)
 
 	// Handle the request with Fiber app
-	requestCtx := &fasthttp.RequestCtx{
-		Request:  *fasthttpReq,
-		Response: *fasthttpResp,
-	}
 	app.Handler()(requestCtx)
 
 	// Convert fasthttp.Response to APIGatewayProxyResponse
 	resp := events.APIGatewayProxyResponse{
-		StatusCode: fasthttpResp.StatusCode(),
+		StatusCode: requestCtx.Response.StatusCode(),
 		Headers:    make(map[string]string),
-		Body:       string(fasthttpResp.Body()),
+		Body:       string(requestCtx.Response.Body()),
 	}
-	fasthttpResp.Header.VisitAll(func(key, value []byte) {
+	requestCtx.Response.Header.VisitAll(func(key, value []byte) {
 		resp.Headers[string(key)] = string(value)
 	})
-
-	logger.Info("Handler response", zap.Any("response", resp))
 
 	return resp, nil
 }
