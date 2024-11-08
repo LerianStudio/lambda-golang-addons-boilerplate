@@ -1,6 +1,6 @@
 FROM golang:1.23-alpine AS builder
 
-WORKDIR /ledger-app
+WORKDIR /addons-app
 
 COPY . .
 

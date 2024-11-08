@@ -35,16 +35,15 @@ func init() {
 	}
 
 	// Initialize repositories
-	postgresConnStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s", cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHost, cfg.PostgresPort, cfg.PostgresDB)
-	command, err := repository.NewPostgresCommand(postgresConnStr)
+	command, err := repository.NewPostgresCommand(fmt.Sprintf("postgres://%s:%s@%s:%s/%s", cfg.DB_USER, cfg.DB_PASSWORD, cfg.DB_HOST, cfg.DB_PORT, cfg.DB_NAME))
 	if err != nil {
 		logger.Fatal("Failed to connect to database", zap.Error(err))
 	}
-	query, err := repository.NewPostgresQuery(postgresConnStr)
+	query, err := repository.NewPostgresQuery(fmt.Sprintf("postgres://%s:%s@%s:%s/%s", cfg.DB_REPLICA_USER, cfg.DB_REPLICA_PASSWORD, cfg.DB_REPLICA_HOST, cfg.DB_REPLICA_PORT, cfg.DB_REPLICA_NAME))
 	if err != nil {
 		logger.Fatal("Failed to connect to database", zap.Error(err))
 	}
-	cache := repository.NewRedis(fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort))
+	cache := repository.NewRedis(fmt.Sprintf("%s:%s", cfg.REDIS_HOST, cfg.REDIS_PORT))
 
 	// Initialize service
 	svc := service.NewService(command, query, cache)
