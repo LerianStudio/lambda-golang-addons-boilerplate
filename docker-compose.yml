@@ -1,0 +1,96 @@
+version: '3.8'
+
+x-postgres:
+  &postgres
+  image: postgres:16-alpine
+  user: ${USER_EXECUTE_COMMAND}
+  restart: always
+  healthcheck:
+    test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -p ${DB_PORT}" ]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+
+x-redis:
+  &redis
+  image: redis:latest
+  env_file:
+    - .env
+
+services:
+  redis:
+    <<: *redis
+    container_name: addons-redis
+    ports:
+      - ${REDIS_PORT}:${REDIS_PORT}
+
+  postgres-primary:
+    <<: *postgres
+    container_name: addons-postgres-primary
+    ports:
+      - ${DB_PORT}:${DB_PORT}
+    environment:
+      PGPORT: ${DB_PORT}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256\nhost replication all 0.0.0.0/0 md5"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    command: |
+      postgres
+      -c wal_level=replica
+      -c hot_standby=on
+      -c max_wal_senders=10
+      -c max_replication_slots=10
+      -c hot_standby_feedback=on
+    volumes:
+      - ./common/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  postgres-replica:
+    <<: *postgres
+    container_name: addons-postgres-replica
+    ports:
+      - ${DB_REPLICA_PORT}:${DB_REPLICA_PORT}
+    environment:
+      PGPORT: ${DB_REPLICA_PORT}
+      PGUSER: ${REPLICATION_USER}
+      PGPASSWORD: ${REPLICATION_PASSWORD}
+    command: |
+      bash -c "
+      if [ ! -d \"/var/lib/postgresql/data\" ] || [ ! -f \"/var/lib/postgresql/data/postgresql.conf\" ]; then
+        until pg_basebackup --pgdata=/var/lib/postgresql/data -R --slot=replication_slot --host=postgres-primary --port=${DB_PORT}
+        do
+          echo 'Waiting for postgres-primary to connect...'
+          sleep 1s
+        done
+        echo 'Backup done..., starting postgres-replica...'
+        chmod 0700 /var/lib/postgresql/data
+        # Ensure the port is set to use for the replica
+        sed -i 's/^#port.*/port = ${DB_REPLICA_PORT}/' /var/lib/postgresql/data/postgresql.conf
+      fi
+      exec postgres -c config_file=/var/lib/postgresql/data/postgresql.conf
+      "
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_REPLICA_USER} -p ${DB_REPLICA_PORT}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+
+  addons:
+    build: .
+    container_name: addons-app
+    env_file:
+      - .env
+    depends_on:
+      postgres-replica:
+        condition: service_healthy      
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/usr/src/app
+      
+volumes:
+  postgres_data:
+  redis_data:
